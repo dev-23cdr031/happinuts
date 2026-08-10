@@ -613,14 +613,20 @@ export const updateCustomerRole = async (userId: string, role: 'customer' | 'adm
 const ADMIN_LOCAL_KEY = 'happi-nuts-admin-status';
 
 /**
- * The ONLY email allowed to access the admin dashboard.
+ * The ONLY emails allowed to access the admin dashboard.
  * No other user (including users with a local override or a
  * 'role = admin' profile row) can see the admin page.
  */
 export const OWNER_EMAIL = 'devdharrshans.23csd@kongu.edu';
+export const ADMIN_EMAILS = [OWNER_EMAIL, 'devdharrshan421@gmail.com'];
 
 export const isOwnerEmail = (email: string | null | undefined): boolean =>
-  Boolean(email && email.trim().toLowerCase() === OWNER_EMAIL);
+  Boolean(
+    email &&
+      ADMIN_EMAILS.some(
+        (adminEmail) => email.trim().toLowerCase() === adminEmail.toLowerCase(),
+      ),
+  );
 
 export const checkIsAdmin = async (): Promise<boolean> => {
   const { data } = await supabase.auth.getSession();
