@@ -50,6 +50,8 @@
 }
 
 :root {
+  color-scheme: light;
+  
   /* Happi Nuts Brand Colors */
   --happi-pink: #E91E73;
   --happi-cyan: #19A9E5;
@@ -128,9 +130,16 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    background-color: #FFFFFF;
+  }
   body {
     @apply bg-background text-foreground;
+    background-color: #FFFFFF;
     font-family: 'Poppins', 'Noto Sans Tamil', sans-serif;
+  }
+  #root {
+    background-color: #FFFFFF;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
