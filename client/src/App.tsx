@@ -22,6 +22,8 @@ import Checkout from "./pages/Checkout";
 import Wishlist from "./pages/Wishlist";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Account from "./pages/Account";
 import MyOrders from "./pages/MyOrders";
 import Admin from "./pages/Admin";
@@ -93,6 +95,16 @@ function Router() {
       <Route path={"/signup"}>
         <GuardedRoute pageKey="signup" pageName="Sign Up">
           <Signup />
+        </GuardedRoute>
+      </Route>
+      <Route path={"/forgot-password"}>
+        <GuardedRoute pageKey="forgot-password" pageName="Forgot Password">
+          <ForgotPassword />
+        </GuardedRoute>
+      </Route>
+      <Route path={"/reset-password"}>
+        <GuardedRoute pageKey="reset-password" pageName="Reset Password">
+          <ResetPassword />
         </GuardedRoute>
       </Route>
       <Route path={"/account"}>

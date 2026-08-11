@@ -215,7 +215,7 @@ export default function Login() {
                       />
                       <span className="text-sm text-gray-600">Remember me</span>
                     </label>
-                    <a href="#" className="text-sm text-happi-pink hover:underline">
+                    <a href="/forgot-password" className="text-sm text-happi-pink hover:underline">
                       Forgot password?
                     </a>
                   </div>

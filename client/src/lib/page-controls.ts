@@ -16,6 +16,8 @@ export type PageKey =
   | 'wishlist'
   | 'login'
   | 'signup'
+  | 'forgot-password'
+  | 'reset-password'
   | 'checkout'
   | 'account'
   | 'product-details'
@@ -47,6 +49,8 @@ export const DEFAULT_PAGE_CONTROLS: PageControl[] = [
   { key: 'wishlist', label: 'Wishlist', enabled: true, description: 'Saved favorites' },
   { key: 'login', label: 'Login', enabled: true, description: 'User sign-in' },
   { key: 'signup', label: 'Sign Up', enabled: true, description: 'Create account' },
+  { key: 'forgot-password', label: 'Forgot Password', enabled: true, description: 'Request password reset' },
+  { key: 'reset-password', label: 'Reset Password', enabled: true, description: 'Set new password' },
   { key: 'checkout', label: 'Checkout', enabled: true, description: 'Place order & pay' },
   { key: 'account', label: 'Account', enabled: true, description: 'User dashboard' },
   { key: 'product-details', label: 'Product Details', enabled: true, description: 'Product detail page' },
