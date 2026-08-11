@@ -524,7 +524,7 @@ export function ReturnsPage() {
               },
               {
                 heading: 'Refund process',
-                body: ['Approved refunds are processed back to the original payment method within 5 to 7 business days, depending on your bank or payment provider. For any questions, contact hello@happinuts.com with your order number and a brief description so we can assist promptly.'],
+                body: ['Approved refunds are processed back to the original payment method within 5 to 7 business days, depending on your bank or payment provider. For any questions, contact todaymart2017@gmail.com with your order number and a brief description so we can assist promptly.'],
               },
             ].map((section, index) => (
               <InfoSectionCard

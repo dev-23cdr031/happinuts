@@ -55,8 +55,8 @@ export default function Contact() {
     {
       icon: Mail,
       title: 'Email Us',
-      content: 'hello@happinuts.com',
-      link: 'mailto:hello@happinuts.com',
+      content: 'todaymart2017@gmail.com',
+      link: 'mailto:todaymart2017@gmail.com',
       gradient: 'from-happi-cyan/15 to-happi-green/10',
     },
     {
