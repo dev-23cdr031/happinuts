@@ -244,13 +244,12 @@ export default function Cart() {
                       <span>-₹{discount}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-gray-600">
+                  <div className="flex items-center justify-between gap-4 text-gray-600">
                     <span>Delivery</span>
-                    <span className={delivery === 0 ? 'text-happi-green font-semibold' : ''}>
+                    <span className={`text-right text-sm ${delivery === 0 ? 'text-gray-500' : 'font-semibold text-happi-charcoal'}`}>
                       {delivery === 0 ? (
-                        <span className="inline-flex items-center gap-1">
-                          <BadgeCheck className="w-4 h-4" />
-                          FREE
+                        <span className="inline-block max-w-[180px] leading-snug">
+                          Applicable to transportation charge
                         </span>
                       ) : (
                         `₹${delivery}`
@@ -294,7 +293,7 @@ export default function Cart() {
                 </div>
 
                 {/* Buttons */}
-                <div className="space-y-3">
+                <div className="flex flex-col gap-4">
                   <a
                     href="/checkout"
                     className="btn-primary w-full text-center flex items-center justify-center gap-2 btn-shine"

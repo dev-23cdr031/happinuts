@@ -431,10 +431,16 @@ export default function Checkout() {
                     <span>-₹{discount}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-gray-600">
+                <div className="flex items-center justify-between gap-4 text-gray-600">
                   <span>Delivery</span>
-                  <span className={delivery === 0 ? 'text-happi-green font-semibold' : ''}>
-                    {delivery === 0 ? 'FREE' : `₹${delivery}`}
+                  <span className={`text-right text-sm ${delivery === 0 ? 'text-gray-500' : 'font-semibold text-happi-charcoal'}`}>
+                    {delivery === 0 ? (
+                      <span className="inline-block max-w-[180px] leading-snug">
+                        Applicable to transportation charge
+                      </span>
+                    ) : (
+                      `₹${delivery}`
+                    )}
                   </span>
                 </div>
               </div>
