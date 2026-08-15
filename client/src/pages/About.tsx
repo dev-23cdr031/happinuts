@@ -95,9 +95,9 @@ export default function About() {
             >
               <TiltCard className="rounded-3xl shadow-2xl">
                 <img
-                  src="/manus-storage/hero-almonds-cashews_6b5f2cb0.png"
-                  alt="Our Story"
-                  className="w-full h-96 object-cover rounded-3xl"
+                  src="/assets/happi-nuts-storefront.jpg"
+                  alt="The Happi Nuts storefront, where our local story began"
+                  className="w-full h-96 object-cover object-center rounded-3xl"
                 />
               </TiltCard>
               <motion.div

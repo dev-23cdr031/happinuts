@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { Menu, X, Search, Heart, ShoppingCart, User, LogOut, AlertTriangle } from 'lucide-react';
+import { Menu, X, Heart, ShoppingCart, User, LogOut, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import BrandLogo from './BrandLogo';
@@ -98,19 +98,19 @@ export default function Header() {
             : 'bg-white/50 backdrop-blur-md border-b border-white/10'
         }`}
       >
-        <div className="container flex items-center justify-between h-20">
+        <div className="container flex h-20 items-center gap-3 xl:gap-5">
           {/* Brand logo */}
           <a href="/" className="flex items-center group" aria-label="Happi Nuts home">
             <span className="group-hover:scale-[1.02] transition-transform"><BrandLogo /></span>
           </a>
 
           {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center gap-8">
+          <nav className="hidden xl:flex min-w-0 flex-1 items-center justify-center gap-4 2xl:gap-6">
             {navItems.map((item) => (
               <a
                 key={item.href}
                 href={item.href}
-                className={`font-medium text-sm transition-all duration-200 pb-2 border-b-2 ${
+                className={`whitespace-nowrap font-medium text-sm transition-all duration-200 pb-2 border-b-2 ${
                   location === item.href
                     ? 'text-happi-pink border-happi-pink'
                     : 'text-happi-charcoal border-transparent hover:text-happi-pink'
@@ -122,14 +122,7 @@ export default function Header() {
           </nav>
 
           {/* Right Actions */}
-          <div className="flex items-center gap-1 sm:gap-4">
-            <button
-              type="button"
-              aria-label="Search products"
-              className="hidden sm:inline-flex h-9 w-9 items-center justify-center border border-happi-charcoal/70 bg-transparent text-happi-charcoal transition-colors hover:border-happi-pink hover:text-happi-pink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-happi-pink/40"
-            >
-              <Search className="w-5 h-5 stroke-[2]" aria-hidden="true" />
-            </button>
+          <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
             <a
               href="/wishlist"
               className="p-2 hover:bg-happi-pink/10 rounded-lg transition-colors relative"
@@ -154,19 +147,25 @@ export default function Header() {
             </a>
             {session ? (
               <div className="flex items-center gap-1 sm:gap-2">
-                <div className="hidden lg:flex items-center rounded-full border border-happi-pink/20 bg-happi-pink/5 px-3 py-1.5 text-xs text-happi-charcoal">
+                <div className="hidden 2xl:flex max-w-32 items-center truncate rounded-full border border-happi-pink/20 bg-happi-pink/5 px-3 py-1.5 text-xs text-happi-charcoal">
                   {session.user?.email?.split('@')[0] || 'User'}
                 </div>
                 <a
+                  href="/account"
+                  className="hidden md:inline-flex items-center whitespace-nowrap rounded-full border border-happi-pink/20 bg-happi-pink/5 px-3 py-1.5 text-xs font-semibold text-happi-pink hover:bg-happi-pink hover:text-white transition-colors"
+                >
+                  Account
+                </a>
+                <a
                   href="/my-orders"
-                  className="hidden lg:inline-flex items-center rounded-full border border-happi-cyan/20 bg-happi-cyan/5 px-3 py-1.5 text-xs font-semibold text-happi-cyan hover:bg-happi-cyan hover:text-white transition-colors"
+                  className="hidden md:inline-flex items-center whitespace-nowrap rounded-full border border-happi-cyan/20 bg-happi-cyan/5 px-3 py-1.5 text-xs font-semibold text-happi-cyan hover:bg-happi-cyan hover:text-white transition-colors"
                 >
                   My Orders
                 </a>
                 {isAdmin && (
                   <a
                     href="/admin"
-                    className="hidden lg:inline-flex items-center rounded-full border border-happi-pink/20 bg-white px-3 py-1.5 text-xs font-semibold text-happi-pink"
+                    className="hidden md:inline-flex items-center whitespace-nowrap rounded-full border border-happi-pink/20 bg-white px-3 py-1.5 text-xs font-semibold text-happi-pink"
                   >
                     Admin
                   </a>
@@ -192,7 +191,7 @@ export default function Header() {
             )}
             <a
               href="/shop"
-              className="hidden md:inline-block btn-primary text-sm"
+              className="hidden 2xl:inline-block whitespace-nowrap btn-primary text-sm"
             >
               Shop Now
             </a>
@@ -201,7 +200,7 @@ export default function Header() {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="lg:hidden p-2"
+            className="xl:hidden shrink-0 p-2"
           >
             {isMenuOpen ? (
               <X className="w-6 h-6 text-happi-charcoal" />
@@ -218,7 +217,7 @@ export default function Header() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
-          className="fixed inset-0 top-20 bg-white z-40 lg:hidden overflow-y-auto"
+          className="fixed inset-0 top-20 bg-white z-40 xl:hidden overflow-y-auto"
         >
           <nav className="flex flex-col p-6 gap-4">
             {navItems.map((item) => (
@@ -235,6 +234,24 @@ export default function Header() {
                 {item.label}
               </a>
             ))}
+            {session && (
+              <a
+                href="/my-orders"
+                onClick={() => setIsMenuOpen(false)}
+                className="py-3 px-4 rounded-lg font-medium transition-all text-happi-cyan hover:bg-happi-cream"
+              >
+                My Orders
+              </a>
+            )}
+            {session && (
+              <a
+                href="/account"
+                onClick={() => setIsMenuOpen(false)}
+                className="py-3 px-4 rounded-lg font-medium transition-all text-happi-pink hover:bg-happi-cream"
+              >
+                Account
+              </a>
+            )}
             {isAdmin && (
               <a
                 href="/admin"

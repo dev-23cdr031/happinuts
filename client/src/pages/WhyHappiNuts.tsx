@@ -304,9 +304,9 @@ export default function WhyHappiNuts() {
             >
               <TiltCard className="rounded-3xl shadow-2xl">
                 <img
-                  src="/manus-storage/hero-almonds-cashews_6b5f2cb0.png"
-                  alt="Why Happi Nuts"
-                  className="w-full h-96 object-cover rounded-3xl"
+                  src="/assets/happi-nuts-promise.jpg"
+                  alt="Happi Nuts storefront sign and product range"
+                  className="w-full h-96 object-cover object-center rounded-3xl"
                 />
               </TiltCard>
               <motion.div

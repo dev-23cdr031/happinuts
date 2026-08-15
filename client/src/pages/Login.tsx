@@ -57,13 +57,35 @@ export default function Login() {
 
     try {
       setIsSubmitting(true);
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error, data } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
       });
 
       if (error) {
         throw error;
+      }
+
+      // Ensure a profile row exists so the customer appears in Admin → Customers
+      // even if the Supabase trigger (handle_new_user) isn't installed.
+      if (data.user) {
+        const { error: profileError } = await supabase.from('profiles').upsert(
+          {
+            id: data.user.id,
+            full_name:
+              data.user.user_metadata?.full_name ||
+              data.user.email?.split('@')[0] ||
+              'Customer',
+            email: data.user.email,
+            phone: data.user.user_metadata?.phone || '',
+            role: 'customer',
+          },
+          { onConflict: 'id' },
+        );
+
+        if (profileError) {
+          console.warn('Failed to ensure profile row exists on login:', profileError.message);
+        }
       }
 
       toast.success('Welcome back! You are now signed in.');

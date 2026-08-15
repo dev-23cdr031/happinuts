@@ -179,42 +179,42 @@ export default function AccountPage() {
             </button>
           </div>
 
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
-            <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-200">
+          <div className="mt-10 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="min-w-0 rounded-2xl bg-white p-6 shadow-sm border border-gray-200">
               <div className="flex items-center gap-3 text-happi-pink">
                 <User className="w-5 h-5" />
                 <span className="font-semibold">Name</span>
               </div>
-              <p className="mt-4 text-lg font-medium text-happi-charcoal">
+              <p className="mt-4 break-words text-lg font-medium text-happi-charcoal">
                 {profile.full_name || 'Not provided'}
               </p>
             </div>
 
-            <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-200">
+            <div className="min-w-0 rounded-2xl bg-white p-6 shadow-sm border border-gray-200">
               <div className="flex items-center gap-3 text-happi-pink">
                 <Mail className="w-5 h-5" />
                 <span className="font-semibold">Email</span>
               </div>
-              <p className="mt-4 text-lg font-medium text-happi-charcoal">
+              <p className="mt-4 break-all text-lg font-medium text-happi-charcoal">
                 {profile.email || session.user.email || 'Not provided'}
               </p>
             </div>
 
-            <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-200">
+            <div className="min-w-0 rounded-2xl bg-white p-6 shadow-sm border border-gray-200">
               <div className="flex items-center gap-3 text-happi-pink">
                 <Phone className="w-5 h-5" />
                 <span className="font-semibold">Phone</span>
               </div>
-              <p className="mt-4 text-lg font-medium text-happi-charcoal">
+              <p className="mt-4 break-words text-lg font-medium text-happi-charcoal">
                 {profile.phone || 'Not provided'}
               </p>
             </div>
           </div>
 
           <div className="mt-10 rounded-2xl bg-white border border-gray-200 p-6">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 text-happi-green">
-                <ShieldCheck className="w-5 h-5" />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3 text-happi-green">
+                <ShieldCheck className="h-5 w-5 shrink-0" />
                 <span className="font-semibold">Account status</span>
               </div>
 
@@ -222,7 +222,7 @@ export default function AccountPage() {
                 <button
                   type="button"
                   onClick={() => setIsEditing(true)}
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-happi-pink hover:text-happi-charcoal"
+                  className="inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-happi-pink hover:text-happi-charcoal"
                 >
                   <PencilLine className="w-4 h-4" />
                   Edit profile
@@ -231,7 +231,7 @@ export default function AccountPage() {
                 <button
                   type="button"
                   onClick={() => setIsEditing(false)}
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-happi-charcoal"
+                  className="inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-gray-600 hover:text-happi-charcoal"
                 >
                   <X className="w-4 h-4" />
                   Cancel
@@ -244,7 +244,7 @@ export default function AccountPage() {
             </p>
 
             {isEditing && (
-              <div className="mt-6 space-y-4">
+              <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-semibold text-happi-charcoal mb-2">Full name</label>
                   <input

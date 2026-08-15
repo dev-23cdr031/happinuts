@@ -34,7 +34,7 @@ export default function Shop() {
   const [visibleCount, setVisibleCount] = useState(12);
 
   const filteredProducts = useMemo(() => {
-    let result = products.filter((product) => Boolean(product.image));
+    let result = [...products];
     result = result.filter(
       (product, index, allProducts) => allProducts.findIndex((item) => item.name === product.name) === index,
     );

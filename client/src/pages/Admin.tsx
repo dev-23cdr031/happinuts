@@ -2237,24 +2237,24 @@ export default function AdminPage() {
           onValueChange={(value) => setActiveTab(value as AdminTab)}
           className="w-full"
         >
-          <TabsList className="w-full h-auto min-h-12 justify-start overflow-x-auto p-1 bg-white border border-gray-200 gap-1 [scrollbar-width:thin]">
+          <TabsList className="w-full h-auto min-h-12 flex-nowrap justify-start overflow-x-auto overscroll-x-contain p-1 bg-white border border-gray-200 gap-1 [scrollbar-width:thin]">
             <TabsTrigger
               value="dashboard"
-              className="flex-none shrink-0 items-center gap-2 px-3 sm:px-4 py-2.5 data-[state=active]:bg-happi-pink data-[state=active]:text-white"
+              className="flex-none shrink-0 whitespace-nowrap items-center gap-2 px-3 sm:px-4 py-2.5 data-[state=active]:bg-happi-pink data-[state=active]:text-white"
             >
               <LayoutDashboard className="w-4 h-4" />
               Dashboard
             </TabsTrigger>
             <TabsTrigger
               value="controls"
-              className="flex-none shrink-0 items-center gap-2 px-3 sm:px-4 py-2.5 data-[state=active]:bg-happi-pink data-[state=active]:text-white"
+              className="flex-none shrink-0 whitespace-nowrap items-center gap-2 px-3 sm:px-4 py-2.5 data-[state=active]:bg-happi-pink data-[state=active]:text-white"
             >
               <Settings2 className="w-4 h-4" />
               Controls
             </TabsTrigger>
             <TabsTrigger
               value="products"
-              className="flex-none shrink-0 items-center gap-2 px-3 sm:px-4 py-2.5 data-[state=active]:bg-happi-pink data-[state=active]:text-white"
+              className="flex-none shrink-0 whitespace-nowrap items-center gap-2 px-3 sm:px-4 py-2.5 data-[state=active]:bg-happi-pink data-[state=active]:text-white"
             >
               <PackageCheck className="w-4 h-4" />
               Products
@@ -2264,7 +2264,7 @@ export default function AdminPage() {
             </TabsTrigger>
             <TabsTrigger
               value="orders"
-              className="flex-none shrink-0 items-center gap-2 px-3 sm:px-4 py-2.5 data-[state=active]:bg-happi-pink data-[state=active]:text-white"
+              className="flex-none shrink-0 whitespace-nowrap items-center gap-2 px-3 sm:px-4 py-2.5 data-[state=active]:bg-happi-pink data-[state=active]:text-white"
             >
               <ShoppingBag className="w-4 h-4" />
               Orders
@@ -2276,14 +2276,14 @@ export default function AdminPage() {
             </TabsTrigger>
             <TabsTrigger
               value="customers"
-              className="flex items-center gap-2 px-4 py-2.5 data-[state=active]:bg-happi-pink data-[state=active]:text-white"
+              className="flex-none shrink-0 whitespace-nowrap items-center gap-2 px-3 sm:px-4 py-2.5 data-[state=active]:bg-happi-pink data-[state=active]:text-white"
             >
               <Users className="w-4 h-4" />
               Customers
             </TabsTrigger>
             <TabsTrigger
               value="messages"
-              className="flex items-center gap-2 px-4 py-2.5 data-[state=active]:bg-happi-pink data-[state=active]:text-white"
+              className="flex-none shrink-0 whitespace-nowrap items-center gap-2 px-3 sm:px-4 py-2.5 data-[state=active]:bg-happi-pink data-[state=active]:text-white"
             >
               <Mail className="w-4 h-4" />
               Messages

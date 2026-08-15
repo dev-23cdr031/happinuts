@@ -637,6 +637,31 @@ export const checkIsAdmin = async (): Promise<boolean> => {
   // Strict owner-only check — no other user gets admin access.
   if (!isOwnerEmail(session.user.email)) return false;
 
+  // Ensure the owner's profile row exists with role='admin' in Supabase.
+  // The products table RLS insert/update/delete policies require a profile
+  // row with role='admin' for the current user, so without this the
+  // "Add product" button would fail with an RLS error even though the
+  // client-side email check passed.
+  if (isOnline()) {
+    const { error } = await supabase.from('profiles').upsert(
+      {
+        id: session.user.id,
+        full_name:
+          session.user.user_metadata?.full_name ||
+          session.user.email?.split('@')[0] ||
+          'Admin',
+        email: session.user.email,
+        phone: session.user.user_metadata?.phone || '',
+        role: 'admin',
+      },
+      { onConflict: 'id' },
+    );
+
+    if (error) {
+      console.warn('Failed to ensure admin profile row exists:', error.message);
+    }
+  }
+
   // Cache the owner in the local flag for fast future checks.
   const existing = readLocalJson<Record<string, boolean>>(ADMIN_LOCAL_KEY, {});
   existing[session.user.id] = true;

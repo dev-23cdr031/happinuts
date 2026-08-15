@@ -86,6 +86,26 @@ export default function Signup() {
         throw error;
       }
 
+      // Explicitly create the profile row so the new customer appears
+      // in the Admin → Customers page even if the Supabase trigger
+      // (handle_new_user) isn't installed in the project.
+      if (data.user) {
+        const { error: profileError } = await supabase.from('profiles').upsert(
+          {
+            id: data.user.id,
+            full_name: formData.name,
+            phone: formData.phone,
+            email: formData.email,
+            role: 'customer',
+          },
+          { onConflict: 'id' },
+        );
+
+        if (profileError) {
+          console.warn('Failed to create profile row:', profileError.message);
+        }
+      }
+
       if (data.user && !data.session) {
         toast.success('Account created! Check your email to confirm your registration.');
       } else {
