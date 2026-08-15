@@ -176,6 +176,23 @@ export const fetchProducts = async (): Promise<Product[]> => {
 export const seedProductsToSupabase = async (products: Product[]): Promise<void> => {
   if (!isOnline() || products.length === 0) return;
 
+  // Only seed when the products table is completely empty.
+  // The Supabase products table is the source of truth — re-seeding the
+  // full static catalog on every admin login would re-add products the
+  // owner intentionally deleted from the store.
+  const { count, error: countError } = await supabase
+    .from('products')
+    .select('id', { count: 'exact', head: true });
+
+  if (countError) {
+    console.warn('Failed to check products table before seeding:', countError.message);
+    return;
+  }
+
+  if (count !== null && count > 0) {
+    return; // table already has products — never overwrite/append
+  }
+
   const rows = products.map(toSupabaseProduct);
 
   const { error } = await supabase

@@ -27,7 +27,7 @@ export interface Product {
 
 const ADMIN_PRODUCTS_KEY = 'happi-nuts-admin-products';
 const CATALOG_VERSION_KEY = 'happi-nuts-catalog-version';
-const CATALOG_VERSION = 'v2-no-static-badges';
+const CATALOG_VERSION = 'v3-db-authoritative';
 
 const PRODUCT_COLUMNS = `
   id,
@@ -264,20 +264,11 @@ export const getCatalogProducts = (): Product[] => {
     }
 
     const savedProducts = parsed as Product[];
-    const requiredProductNames = new Set([
-      'Black Dates',
-      'Honey Gooseberries',
-      'Fruit Chips',
-      'Dried Mango',
-      'Dried Pineapple',
-      'Dried Papaya',
-    ]);
-    const catalogProducts = [
-      ...savedProducts,
-      ...defaultProducts.filter(
-        (product) => requiredProductNames.has(product.name) && !savedProducts.some((saved) => saved.name === product.name),
-      ),
-    ];
+
+    // The local catalog is only a cache — the Supabase products table is the
+    // source of truth when online. Never re-add static products here that the
+    // owner may have intentionally removed from the store.
+    const catalogProducts = [...savedProducts];
 
     // Split into known menu products (which get legacy hydration + image mapping)
     // and admin-added products (which must pass through so they appear on the storefront).
@@ -367,20 +358,11 @@ export const syncCatalogFromSupabase = async (): Promise<Product[]> => {
 
     const remoteProducts = data.map(toLocalProduct);
 
-    // Merge: remote (Supabase) products come first; local-only products
-    // that don't exist remotely are kept at the end.
-    const merged = [...remoteProducts];
-    for (const localProduct of localProducts) {
-      const exists = merged.some(
-        (p) => p.id === localProduct.id || p.name === localProduct.name,
-      );
-      if (!exists) {
-        merged.push(localProduct);
-      }
-    }
-
-    writeCatalogProducts(merged);
-    return merged;
+    // The Supabase products table is the authoritative catalog. Do NOT merge
+    // in static/local products that don't exist remotely — otherwise products
+    // the owner deleted from the store would reappear on the website.
+    writeCatalogProducts(remoteProducts);
+    return remoteProducts;
   } catch (e) {
     console.warn('Failed to sync products from Supabase:', e);
     return localProducts;
