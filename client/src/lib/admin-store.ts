@@ -431,6 +431,26 @@ export const createOrderInSupabase = async (order: {
     return null;
   }
 
+  // Ensure the user's profile row exists BEFORE inserting the order.
+  // The orders.user_id column has a foreign key to public.profiles(id),
+  // so if the profile is missing the insert fails with an FK violation.
+  if (order.user_id) {
+    const { error: profileError } = await supabase.from('profiles').upsert(
+      {
+        id: order.user_id,
+        full_name: order.customer_name,
+        email: order.email,
+        phone: order.phone,
+        role: 'customer',
+      },
+      { onConflict: 'id' },
+    );
+
+    if (profileError) {
+      console.warn('Failed to ensure user profile exists:', profileError.message);
+    }
+  }
+
   const { data: orderData, error: orderError } = await supabase
     .from('orders')
     .insert({

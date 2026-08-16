@@ -62,7 +62,6 @@ export default function Checkout() {
       setFormData((prev) => ({
         ...prev,
         name: prev.name || nextProfile.full_name || '',
-        email: prev.email || nextProfile.email || '',
         phone: prev.phone || nextProfile.phone || '',
       }));
     };
@@ -73,7 +72,6 @@ export default function Checkout() {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     name: '',
-    email: '',
     phone: '',
     address: '',
     city: '',
@@ -102,7 +100,7 @@ export default function Checkout() {
         order_number: orderNumber,
         user_id: sessionUserId,
         customer_name: formData.name,
-        email: formData.email,
+        email: profile?.email || '',
         phone: formData.phone,
         address: formData.address,
         city: formData.city,
@@ -259,20 +257,6 @@ export default function Checkout() {
                       />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-semibold text-happi-charcoal mb-2">
-                          Email
-                        </label>
-                        <input
-                          type="email"
-                          name="email"
-                          value={formData.email}
-                          onChange={handleChange}
-                          required
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-happi-pink"
-                          placeholder="john@example.com"
-                        />
-                      </div>
                       <div>
                         <label className="block text-sm font-semibold text-happi-charcoal mb-2">
                           Phone
