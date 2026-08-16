@@ -231,7 +231,7 @@ const menuProducts: MenuProduct[] = [
 
 const nutrition = { calories: 'See package', protein: 'See package', fat: 'See package', carbs: 'See package', fiber: 'See package' };
 
-const defaultProducts: Product[] = menuProducts.map((item, index) => ({
+export const defaultProducts: Product[] = menuProducts.map((item, index) => ({
   id: String(index + 1),
   ...item,
   image: productImages[item.name],

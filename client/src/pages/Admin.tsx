@@ -69,7 +69,7 @@ import {
   type PageControlsRow,
   type ContactMessageRow,
 } from '@/lib/admin-store';
-import { getCatalogProducts, setCatalogProducts, type Product } from '@/data/products';
+import { defaultProducts, getCatalogProducts, setCatalogProducts, type Product } from '@/data/products';
 import {
   getStoreSettings,
   saveStoreSettings,
@@ -1358,16 +1358,19 @@ function ControlsSection({
     });
   }, []);
 
+  // Only count products with a valid image — products without an image
+  // are hidden from the customer storefront, so they must also be hidden
+  // here to keep the counts consistent.
+  const visibleProducts = useMemo(
+    () => products.filter((p) => p.image && p.image.trim().length > 0),
+    [products],
+  );
   const enabledCount = controls.filter((c) => c.enabled).length;
   const lockedCount = controls.filter((c) => !c.enabled).length;
-  const outOfStockCount = products.filter((p) => getProductToggles()[p.id] === false).length;
+  const outOfStockCount = visibleProducts.filter((p) => getProductToggles()[p.id] === false).length;
 
   const filteredProducts = useMemo(() => {
-    return products.filter((p) => {
-      // Only show products with a valid image — products without an image
-      // are hidden from the customer storefront, so they must also be hidden
-      // here to keep the counts consistent.
-      if (!p.image || p.image.trim().length === 0) return false;
+    return visibleProducts.filter((p) => {
       const matchesSearch =
         !searchTerm ||
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1380,7 +1383,7 @@ function ControlsSection({
         (statusFilter === 'locked' && false);
       return matchesSearch && matchesStatus;
     });
-  }, [products, searchTerm, statusFilter, productToggles]);
+  }, [visibleProducts, searchTerm, statusFilter, productToggles]);
 
   const handleTogglePage = (key: PageControl['key']) => {
     const next = setPageControl(key, !controls.find((c) => c.key === key)?.enabled);
@@ -1463,7 +1466,7 @@ function ControlsSection({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500 font-medium">Products Live</p>
-              <p className="text-3xl font-black text-happi-cyan mt-1">{products.length - outOfStockCount}</p>
+              <p className="text-3xl font-black text-happi-cyan mt-1">{visibleProducts.length - outOfStockCount}</p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-happi-cyan/10 flex items-center justify-center">
               <PackageCheck className="w-5 h-5 text-happi-cyan" />
@@ -2127,7 +2130,11 @@ export default function AdminPage() {
   // AND have a valid product image. Products without an image are hidden from the
   // customer storefront (Shop page), so they must also be hidden from the admin
   // product list to keep the counts consistent across pages.
-  const catalogNames = useMemo(() => new Set(getCatalogProducts().map((p) => p.name)), [products]);
+  //
+  // IMPORTANT: Use `defaultProducts` (the authoritative 60-product list) instead of
+  // `getCatalogProducts()` which reads device-specific localStorage — otherwise each
+  // device/browser could show a different product count based on its cached catalog.
+  const catalogNames = useMemo(() => new Set(defaultProducts.map((p) => p.name)), []);
   const adminProducts = useMemo(
     () => products.filter((p) => catalogNames.has(p.name) && p.image && p.image.trim().length > 0),
     [products, catalogNames],
@@ -2505,7 +2512,7 @@ export default function AdminPage() {
           {/* Controls Tab */}
           <TabsContent value="controls" className="mt-6 space-y-8">
             <StoreSettingsSection />
-            <ControlsSection products={products} />
+            <ControlsSection products={adminProducts} />
           </TabsContent>
 
           {/* Products Tab */}
@@ -2652,7 +2659,7 @@ export default function AdminPage() {
               onDiscountChange={handleOrderDiscountChange}
               onDeliveryChange={handleOrderDeliveryChange}
               onDelete={handleDeleteOrder}
-              products={products}
+              products={adminProducts}
             />
           </TabsContent>
 
