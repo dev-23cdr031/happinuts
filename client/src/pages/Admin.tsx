@@ -1364,6 +1364,10 @@ function ControlsSection({
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
+      // Only show products with a valid image — products without an image
+      // are hidden from the customer storefront, so they must also be hidden
+      // here to keep the counts consistent.
+      if (!p.image || p.image.trim().length === 0) return false;
       const matchesSearch =
         !searchTerm ||
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -2119,12 +2123,13 @@ export default function AdminPage() {
     }
   };
 
-  // Only show products that exist in the verified catalog (or were added by admin).
-  // Recompute whenever `products` changes so newly added admin products appear
-  // immediately in the table without needing a full page reload.
+  // Only show products that exist in the verified catalog (or were added by admin)
+  // AND have a valid product image. Products without an image are hidden from the
+  // customer storefront (Shop page), so they must also be hidden from the admin
+  // product list to keep the counts consistent across pages.
   const catalogNames = useMemo(() => new Set(getCatalogProducts().map((p) => p.name)), [products]);
   const adminProducts = useMemo(
-    () => products.filter((p) => catalogNames.has(p.name)),
+    () => products.filter((p) => catalogNames.has(p.name) && p.image && p.image.trim().length > 0),
     [products, catalogNames],
   );
 
