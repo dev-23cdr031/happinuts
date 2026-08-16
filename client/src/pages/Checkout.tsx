@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Check, Banknote } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { clearCart, getCartItems, setCartUser } from '@/lib/cart';
-import { getDeliveryCharge, getDefaultDiscount } from '@/lib/settings';
+import { getDeliveryCharge, getDefaultDiscount, loadStoreSettingsFromSupabase, SETTINGS_UPDATED_EVENT } from '@/lib/settings';
 import { supabase } from '@/lib/supabase';
 import { createOrderInSupabase } from '@/lib/admin-store';
 
@@ -24,6 +24,11 @@ export default function Checkout() {
   const total = subtotal - discount + delivery;
 
   useEffect(() => {
+    // Load the admin-configured store settings from the database so the
+    // delivery/discount shown at checkout matches what customers on every
+    // other device see.
+    loadStoreSettingsFromSupabase();
+
     const checkAuth = async () => {
       const { data } = await supabase.auth.getSession();
       const session = data.session;
@@ -86,8 +91,8 @@ export default function Checkout() {
     });
   };
 
-  const saveOrder = async () => {
-    if (isSavingOrder) return;
+  const saveOrder = async (): Promise<boolean> => {
+    if (isSavingOrder) return false;
 
     setIsSavingOrder(true);
     try {
@@ -119,18 +124,32 @@ export default function Checkout() {
 
       if (order) {
         setPlacedOrderNumber(order.order_number);
-        // Clear the cart only after the order has been successfully saved.
-        // If the order fails or the payment is dismissed, the cart stays intact.
+        // IMPORTANT: Only clear the cart after the database has confirmed
+        // the order was saved. If the backend/database insert fails, the
+        // order is NOT considered successful and the cart stays intact so
+        // the customer can retry.
         clearCart();
+        return true;
+      } else {
+        // The database did not confirm the order — keep the cart and inform.
+        console.error('Order was NOT saved to the database. Cart kept intact for retry.');
+        alert(
+          'We could not save your order right now. Please check your connection and try again. Your cart has been kept for you.',
+        );
+        return false;
       }
     } catch (error) {
       console.warn('Failed to persist order:', error);
+      alert(
+        'We could not save your order right now. Please check your connection and try again. Your cart has been kept for you.',
+      );
+      return false;
     } finally {
       setIsSavingOrder(false);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (step < 3) {
@@ -139,10 +158,14 @@ export default function Checkout() {
     }
 
     if (step === 3) {
-      // Cash on Delivery: save order immediately
-      saveOrder();
-      setIsProcessing(false);
-      setStep(4);
+      // Cash on Delivery: save the order to the DATABASE first.
+      // Only advance to the confirmation step when the database confirms
+      // the order was saved successfully.
+      const order = await saveOrder();
+      if (order) {
+        setIsProcessing(false);
+        setStep(4);
+      }
       return;
     }
 

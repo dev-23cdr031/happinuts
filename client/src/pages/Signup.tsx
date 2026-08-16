@@ -6,6 +6,7 @@ import { useLocation } from 'wouter';
 import BrandLogo from '../components/BrandLogo';
 import ThemedScene from '../components/three/ThemedScene';
 import { supabase } from '../lib/supabase';
+import { isOwnerEmail } from '@/lib/admin-store';
 
 const handleGoogleSignup = async () => {
   try {
@@ -86,6 +87,20 @@ export default function Signup() {
         throw error;
       }
 
+      // If the project has email confirmation enabled, signUp returns
+      // a user WITHOUT a session. Automatically sign in so the user is
+      // logged in immediately — no email confirmation detour needed.
+      if (data.user && !data.session) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        });
+
+        if (signInError) {
+          console.warn('Auto sign-in after signup failed:', signInError.message);
+        }
+      }
+
       // Explicitly create the profile row so the new customer appears
       // in the Admin → Customers page even if the Supabase trigger
       // (handle_new_user) isn't installed in the project.
@@ -106,13 +121,15 @@ export default function Signup() {
         }
       }
 
-      if (data.user && !data.session) {
-        toast.success('Account created! Check your email to confirm your registration.');
-      } else {
-        toast.success('Account created successfully!');
-      }
+      toast.success('Account created successfully!');
 
-      setLocation('/account');
+      // No email confirmation step. The account works immediately and,
+      // for owner/admin emails, the user lands straight on the admin dashboard.
+      if (isOwnerEmail(data.user?.email)) {
+        setLocation('/admin');
+      } else {
+        setLocation('/account');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to create account. Please try again.';
       toast.error(message);

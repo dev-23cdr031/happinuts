@@ -1,3 +1,5 @@
+import { supabase } from '@/lib/supabase';
+
 export type StoreSettings = {
   /** Flat delivery fee in ₹ charged when subtotal is below the free threshold. */
   deliveryCharge: number;
@@ -63,6 +65,43 @@ export const saveStoreSettings = (settings: Partial<StoreSettings>): StoreSettin
   window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(next));
   window.dispatchEvent(new Event(SETTINGS_UPDATED_EVENT));
   return next;
+};
+
+/**
+ * Load the store settings from the Supabase database and refresh the local
+ * cache, so customers on every device see the same delivery & discount
+ * configured by the admin. Returns the merged settings.
+ */
+export const loadStoreSettingsFromSupabase = async (): Promise<StoreSettings> => {
+  const isOnline = Boolean(
+    import.meta.env.VITE_SUPABASE_URL &&
+    import.meta.env.VITE_SUPABASE_ANON_KEY &&
+    import.meta.env.VITE_SUPABASE_URL !== 'https://placeholder.supabase.co',
+  );
+
+  if (!isOnline) return readSettings();
+
+  try {
+    const { data, error } = await supabase
+      .from('store_settings')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle();
+
+    if (error || !data) return readSettings();
+
+    const next: StoreSettings = {
+      deliveryCharge: Number(data.delivery_charge),
+      freeDeliveryThreshold: Number(data.free_delivery_threshold),
+      defaultDiscountPercent: Number(data.default_discount_percent),
+    };
+
+    // Refresh the local cache + notify listeners (e.g. checkout summary).
+    saveStoreSettings(next);
+    return next;
+  } catch {
+    return readSettings();
+  }
 };
 
 /** Returns the delivery charge (₹) for a given subtotal based on admin settings. FREE when subtotal >= threshold. */

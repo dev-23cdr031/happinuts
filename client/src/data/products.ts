@@ -57,6 +57,14 @@ const isCatalogOnline = () =>
     import.meta.env.VITE_SUPABASE_URL !== 'https://placeholder.supabase.co',
   );
 
+/**
+ * A product is only visible in the customer storefront when it has a valid
+ * product image. Products with a missing/empty/null image URL are excluded
+ * from the listing (they are NOT removed from the database).
+ */
+const hasValidProductImage = (product: Product): boolean =>
+  Boolean(product.image && product.image.trim().length > 0);
+
 const toLocalProduct = (row: any): Product => ({
   id: row.id,
   name: row.name,
@@ -331,6 +339,15 @@ export const getCatalogProducts = (): Product[] => {
   }
 };
 
+/**
+ * Customer-facing catalog: only products with a valid product image are
+ * shown in the storefront. Products with an empty/null/missing image are
+ * excluded from the listing (they are NOT removed from the database, and
+ * the admin panel still sees the full catalog).
+ */
+export const getVisibleCatalogProducts = (): Product[] =>
+  getCatalogProducts().filter(hasValidProductImage);
+
 export const setCatalogProducts = (nextProducts: Product[]) => {
   writeCatalogProducts(nextProducts);
   return nextProducts;
@@ -362,7 +379,9 @@ export const syncCatalogFromSupabase = async (): Promise<Product[]> => {
     // in static/local products that don't exist remotely — otherwise products
     // the owner deleted from the store would reappear on the website.
     writeCatalogProducts(remoteProducts);
-    return remoteProducts;
+
+    // Return only the customer-facing products that have a valid product image.
+    return remoteProducts.filter(hasValidProductImage);
   } catch (e) {
     console.warn('Failed to sync products from Supabase:', e);
     return localProducts;
@@ -383,7 +402,7 @@ export const getCatalogCategories = () =>
   Object.entries(categoryNames).map(([id, name]) => ({
     id,
     name,
-    count: getCatalogProducts().filter((product) => product.category === id).length,
+    count: getVisibleCatalogProducts().filter((product) => product.category === id).length,
   }));
 
 export const categories = getCatalogCategories();

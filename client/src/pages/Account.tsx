@@ -4,6 +4,7 @@ import { Mail, Phone, User, ShieldCheck, LogOut, Save, PencilLine, X } from 'luc
 import { toast } from 'sonner';
 import { useLocation } from 'wouter';
 import { supabase } from '@/lib/supabase';
+import { isOwnerEmail } from '@/lib/admin-store';
 
 type Profile = {
   id: string;
@@ -169,14 +170,25 @@ export default function AccountPage() {
               </h1>
             </div>
 
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="btn-outline inline-flex items-center gap-2"
-            >
-              <LogOut className="w-4 h-4" />
-              Sign out
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              {isOwnerEmail(session.user.email) && (
+                <a
+                  href="/admin"
+                  className="inline-flex items-center gap-2 rounded-xl bg-happi-pink px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-pink-700 transition-colors"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  Admin Dashboard
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="btn-outline inline-flex items-center gap-2"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign out
+              </button>
+            </div>
           </div>
 
           <div className="mt-10 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">

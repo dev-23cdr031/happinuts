@@ -6,6 +6,7 @@ import { useLocation } from 'wouter';
 import BrandLogo from '../components/BrandLogo';
 import ThemedScene from '../components/three/ThemedScene';
 import { supabase } from '../lib/supabase';
+import { isOwnerEmail } from '@/lib/admin-store';
 
 const handleGoogleLogin = async () => {
   try {
@@ -89,7 +90,14 @@ export default function Login() {
       }
 
       toast.success('Welcome back! You are now signed in.');
-      setLocation('/account');
+
+      // If this is one of the store owner/admin emails, go straight to the
+      // admin dashboard — no account page detour, no email confirmation step.
+      if (isOwnerEmail(data.user?.email)) {
+        setLocation('/admin');
+      } else {
+        setLocation('/account');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to sign in. Please try again.';
       toast.error(message);

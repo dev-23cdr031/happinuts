@@ -3,10 +3,10 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Heart, Zap, Leaf, Truck, Star, Sparkle, ShieldCheck, BadgeCheck, Gift, ThumbsUp } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
 import TiltCard from '@/components/three/TiltCard';
-import { getCatalogProducts, syncCatalogFromSupabase } from '@/data/products';
+import { getVisibleCatalogProducts, syncCatalogFromSupabase } from '@/data/products';
 
 export default function Home() {
-  const [products, setProducts] = useState(() => getCatalogProducts());
+  const [products, setProducts] = useState(() => getVisibleCatalogProducts());
 
   // Pull in any products the admin added/saved to Supabase so they
   // appear on the customer's Home page across browsers.

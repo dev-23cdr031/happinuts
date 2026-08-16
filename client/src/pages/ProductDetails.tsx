@@ -3,14 +3,14 @@ import { useLocation, useParams } from 'wouter';
 import { motion } from 'framer-motion';
 import { Heart, ShoppingCart, Star, Check } from 'lucide-react';
 import ProductCard, { ProductVisual } from '@/components/ProductCard';
-import { getCatalogProducts, syncCatalogFromSupabase } from '@/data/products';
+import { getVisibleCatalogProducts, syncCatalogFromSupabase } from '@/data/products';
 import { addToCart } from '@/lib/cart';
 import { isProductEnabled } from '@/lib/page-controls';
 
 export default function ProductDetails() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const [products, setProducts] = useState(() => getCatalogProducts());
+  const [products, setProducts] = useState(() => getVisibleCatalogProducts());
   const product = products.find((p) => p.id === id);
 
   // Pull in any products the admin added/saved to Supabase so they

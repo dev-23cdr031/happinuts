@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Mail, Phone, MapPin, MessageCircle, Send, Sparkle, Clock, ShieldCheck, BadgeCheck } from 'lucide-react';
 import ThemedScene from '@/components/three/ThemedScene';
 import TiltCard from '@/components/three/TiltCard';
+import { createContactMessage } from '@/lib/admin-store';
 
 export default function Contact() {
   const [formData, setFormData] = useState({
@@ -21,27 +22,23 @@ export default function Contact() {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('Form submitted:', formData);
 
-    // Save the contact message so the admin can see it
-    try {
-      const messages = JSON.parse(localStorage.getItem('happi-nuts-contact-messages') || '[]');
-      messages.unshift({
-        id: `msg-${Date.now()}`,
-        ...formData,
-        created_at: new Date().toISOString(),
-      });
-      localStorage.setItem('happi-nuts-contact-messages', JSON.stringify(messages));
-      window.dispatchEvent(new Event('happi-nuts-contact-messages-updated'));
-    } catch (err) {
-      console.warn('Failed to save contact message:', err);
-    }
+    // Save the contact message to the DATABASE so the admin sees it on any device.
+    const saved = await createContactMessage(formData);
 
-    setSubmitted(true);
-    setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
-    setTimeout(() => setSubmitted(false), 5000);
+    if (saved) {
+      setSubmitted(true);
+      setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
+      setTimeout(() => setSubmitted(false), 5000);
+    } else {
+      console.warn('Failed to save contact message to database.');
+      setSubmitted(true);
+      setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
+      setTimeout(() => setSubmitted(false), 5000);
+    }
   };
 
   const contactCards = [

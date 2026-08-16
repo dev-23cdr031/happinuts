@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { supabase } from '@/lib/supabase';
-import { fetchOrders, type AdminOrder, type OrderStatus } from '@/lib/admin-store';
+import { fetchUserOrders, type AdminOrder, type OrderStatus } from '@/lib/admin-store';
 import ThemedScene from '@/components/three/ThemedScene';
 
 const STATUS_STEPS: OrderStatus[] = ['Pending', 'Packed', 'Shipped', 'Delivered'];
@@ -176,11 +176,27 @@ function OrderCard({ order }: { order: AdminOrder }) {
                         key={item.id}
                         className="flex items-center justify-between bg-happi-cream rounded-lg px-4 py-2.5 text-sm"
                       >
-                        <div>
-                          <span className="font-medium text-happi-charcoal">{item.name}</span>
-                          <span className="text-gray-400 ml-2">× {item.quantity}</span>
+                        <div className="flex items-center gap-3 min-w-0">
+                          {item.image ? (
+                            <img
+                              src={item.image}
+                              alt={item.name}
+                              className="w-10 h-10 rounded-lg object-cover shrink-0"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center shrink-0">
+                              <Package className="w-4 h-4 text-happi-green" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <span className="font-medium text-happi-charcoal block truncate">{item.name}</span>
+                            <span className="text-gray-400">× {item.quantity}</span>
+                          </div>
                         </div>
-                        <span className="font-semibold text-happi-charcoal">
+                        <span className="font-semibold text-happi-charcoal shrink-0">
                           ₹{item.price * item.quantity}
                         </span>
                       </div>
@@ -280,11 +296,15 @@ export default function MyOrders() {
 
   const loadOrders = async () => {
     setLoading(true);
-    const allOrders = await fetchOrders();
-    const userOrders = sessionUserId
-      ? allOrders.filter((order) => order.user_id === sessionUserId)
-      : allOrders.filter((order) => !order.user_id);
-    setOrders(userOrders);
+    if (sessionUserId) {
+      // Fetch the authenticated user's orders DIRECTLY from the database.
+      // This ensures the same orders appear on every device when the user
+      // logs in with the same account.
+      const userOrders = await fetchUserOrders(sessionUserId);
+      setOrders(userOrders);
+    } else {
+      setOrders([]);
+    }
     setLoading(false);
   };
 

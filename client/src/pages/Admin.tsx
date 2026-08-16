@@ -5,6 +5,7 @@ import {
   Pencil,
   Trash2,
   ShieldCheck,
+  Package,
   PackageCheck,
   TrendingUp,
   ShoppingBag,
@@ -52,9 +53,21 @@ import {
   deleteOrder,
   createOrderInSupabase,
   updateCustomerRole,
+  fetchStoreSettings,
+  saveStoreSettingsToSupabase,
+  fetchPageControls,
+  savePageControlsToSupabase,
+  fetchProductToggles,
+  saveProductToggleToSupabase,
+  fetchContactMessages,
+  deleteContactMessage,
+  migrateLocalOrdersToSupabase,
   type AdminOrder,
   type AdminCustomer,
   type OrderStatus,
+  type StoreSettingsRow,
+  type PageControlsRow,
+  type ContactMessageRow,
 } from '@/lib/admin-store';
 import { getCatalogProducts, setCatalogProducts, type Product } from '@/data/products';
 import {
@@ -1155,11 +1168,27 @@ function OrdersSection({
                                     key={item.id}
                                     className="flex items-center justify-between bg-white rounded-lg px-4 py-2.5 border border-gray-200 text-sm"
                                   >
-                                    <div>
-                                      <span className="font-medium text-happi-charcoal">{item.name}</span>
-                                      <span className="text-gray-400 ml-2">× {item.quantity}</span>
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      {item.image ? (
+                                        <img
+                                          src={item.image}
+                                          alt={item.name}
+                                          className="w-10 h-10 rounded-lg object-cover shrink-0"
+                                          onError={(e) => {
+                                            (e.target as HTMLImageElement).style.display = 'none';
+                                          }}
+                                        />
+                                      ) : (
+                                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                                          <Package className="w-4 h-4 text-gray-400" />
+                                        </div>
+                                      )}
+                                      <div className="min-w-0">
+                                        <span className="font-medium text-happi-charcoal block truncate">{item.name}</span>
+                                        <span className="text-gray-400">× {item.quantity}</span>
+                                      </div>
                                     </div>
-                                    <span className="font-semibold text-happi-charcoal">
+                                    <span className="font-semibold text-happi-charcoal shrink-0">
                                       {formatCurrency(item.price * item.quantity)}
                                     </span>
                                   </div>
@@ -1306,6 +1335,29 @@ function ControlsSection({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'locked' | 'out'>('all');
 
+  // Load the shared page controls from the DATABASE so every admin device
+  // sees the same locks/toggles. Falls back to local cache when offline.
+  useEffect(() => {
+    fetchPageControls().then((remoteControls) => {
+      if (remoteControls && remoteControls.length > 0) {
+        const mergedControls = getPageControls().map((def) => {
+          const remote = remoteControls.find((c) => c.key === def.key);
+          return remote ? { ...def, enabled: remote.enabled } : def;
+        });
+        setControls(mergedControls);
+      }
+    });
+    fetchProductToggles().then((remoteToggles) => {
+      if (remoteToggles && remoteToggles.length > 0) {
+        const next: Record<string, boolean> = {};
+        remoteToggles.forEach((t) => {
+          next[t.product_id] = t.enabled;
+        });
+        setProductToggles(next);
+      }
+    });
+  }, []);
+
   const enabledCount = controls.filter((c) => c.enabled).length;
   const lockedCount = controls.filter((c) => !c.enabled).length;
   const outOfStockCount = products.filter((p) => getProductToggles()[p.id] === false).length;
@@ -1335,12 +1387,32 @@ function ControlsSection({
         ? `"${control?.label}" is now LIVE`
         : `"${control?.label}" is now LOCKED`,
     );
+
+    // Persist to the DATABASE so all devices see the same page controls.
+    savePageControlsToSupabase(
+      next.map((c) => ({
+        key: c.key,
+        label: c.label,
+        enabled: c.enabled,
+        description: c.description,
+      })),
+    );
   };
 
   const handleToggleAll = (enabled: boolean) => {
     const next = setAllPageControls(enabled);
     setControls([...next]);
     toast.success(enabled ? 'All pages are now ENABLED' : 'All pages are now LOCKED');
+
+    // Persist to the DATABASE so all devices see the same page controls.
+    savePageControlsToSupabase(
+      next.map((c) => ({
+        key: c.key,
+        label: c.label,
+        enabled: c.enabled,
+        description: c.description,
+      })),
+    );
   };
 
   const handleToggleProduct = (productId: string, enabled: boolean) => {
@@ -1352,6 +1424,9 @@ function ControlsSection({
         ? `${product?.name} is now AVAILABLE in store`
         : `${product?.name} is now OUT OF STOCK`,
     );
+
+    // Persist to the DATABASE so all devices see the same product visibility.
+    saveProductToggleToSupabase(productId, enabled);
   };
 
   return (
@@ -1614,14 +1689,42 @@ function ControlsSection({
 function StoreSettingsSection() {
   const [settings, setSettings] = useState<StoreSettings>(() => getStoreSettings());
 
-  const handleSave = () => {
+  // Load the shared settings from the database so every admin device sees
+  // the same values. Fall back to local cache when offline.
+  useEffect(() => {
+    fetchStoreSettings().then((remote) => {
+      if (remote) {
+        const next: StoreSettings = {
+          deliveryCharge: Number(remote.delivery_charge),
+          freeDeliveryThreshold: Number(remote.free_delivery_threshold),
+          defaultDiscountPercent: Number(remote.default_discount_percent),
+        };
+        setSettings(next);
+        saveStoreSettings(next);
+      }
+    });
+  }, []);
+
+  const handleSave = async () => {
     const next = saveStoreSettings({
       deliveryCharge: Number(settings.deliveryCharge) || 0,
       freeDeliveryThreshold: Number(settings.freeDeliveryThreshold) || 0,
       defaultDiscountPercent: Number(settings.defaultDiscountPercent) || 0,
     });
     setSettings(next);
-    toast.success('Store settings saved. Customers will see the updated delivery & discount.');
+
+    // Persist to the DATABASE so every device shares the same settings.
+    const saved = await saveStoreSettingsToSupabase({
+      delivery_charge: next.deliveryCharge,
+      free_delivery_threshold: next.freeDeliveryThreshold,
+      default_discount_percent: next.defaultDiscountPercent,
+    });
+
+    toast.success(
+      saved
+        ? 'Store settings saved. Customers on all devices will see the updated delivery & discount.'
+        : 'Settings saved locally (database sync failed).',
+    );
   };
 
   const inputClass =
@@ -1720,35 +1823,31 @@ type ContactMessage = {
 };
 
 function MessagesSection() {
-  const [messages, setMessages] = useState<ContactMessage[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('happi-nuts-contact-messages') || '[]');
-    } catch {
-      return [];
-    }
-  });
+  const [messages, setMessages] = useState<ContactMessageRow[]>([]);
 
-  useEffect(() => {
-    const sync = () => {
-      try {
-        setMessages(JSON.parse(localStorage.getItem('happi-nuts-contact-messages') || '[]'));
-      } catch {
-        setMessages([]);
-      }
-    };
-    window.addEventListener('happi-nuts-contact-messages-updated', sync);
-    return () => window.removeEventListener('happi-nuts-contact-messages-updated', sync);
+  const loadMessages = useCallback(async () => {
+    const data = await fetchContactMessages();
+    setMessages(data);
   }, []);
 
-  const deleteMessage = (id: string) => {
-    const next = messages.filter((m) => m.id !== id);
-    localStorage.setItem('happi-nuts-contact-messages', JSON.stringify(next));
-    setMessages(next);
-    toast.success('Message deleted.');
+  useEffect(() => {
+    loadMessages();
+  }, [loadMessages]);
+
+  const deleteMessage = async (id: string) => {
+    const deleted = await deleteContactMessage(id);
+    if (deleted) {
+      setMessages((prev) => prev.filter((m) => m.id !== id));
+      toast.success('Message deleted.');
+    } else {
+      toast.error('Failed to delete message.');
+    }
   };
 
-  const clearAll = () => {
-    localStorage.setItem('happi-nuts-contact-messages', '[]');
+  const clearAll = async () => {
+    for (const msg of messages) {
+      await deleteContactMessage(msg.id);
+    }
     setMessages([]);
     toast.success('All messages cleared.');
   };
@@ -1913,6 +2012,10 @@ export default function AdminPage() {
       // Seed the default catalog to Supabase if it's empty
       await seedProductsToSupabase(getCatalogProducts());
 
+      // Migrate any legacy localStorage-only orders into the database so
+      // they appear on every device (and are never lost).
+      await migrateLocalOrdersToSupabase();
+
       await Promise.all([refreshProducts(), refreshOrders(), refreshCustomers()]);
       setLoading(false);
     };
@@ -1933,9 +2036,52 @@ export default function AdminPage() {
       refreshOrders();
     }, 30_000);
 
+    // REAL-TIME: subscribe to orders so a new customer order appears
+    // instantly in the admin dashboard (on any device that has it open).
+    const ordersChannel = supabase
+      .channel('admin-live-orders')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'orders' },
+        () => refreshOrders(),
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'orders' },
+        () => refreshOrders(),
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'orders' },
+        () => refreshOrders(),
+      )
+      .subscribe();
+
+    // REAL-TIME: also refresh products when the admin adds/edits one.
+    const productsChannel = supabase
+      .channel('admin-live-products')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'products' },
+        () => refreshProducts(),
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'products' },
+        () => refreshProducts(),
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'products' },
+        () => refreshProducts(),
+      )
+      .subscribe();
+
     return () => {
       authListener.subscription.unsubscribe();
       window.clearInterval(ordersInterval);
+      supabase.removeChannel(ordersChannel);
+      supabase.removeChannel(productsChannel);
     };
   }, [navigate, refreshProducts, refreshOrders, refreshCustomers]);
 

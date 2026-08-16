@@ -4,6 +4,8 @@
 // Locked pages show "Temporarily locked by owner".
 // ============================================
 
+import { supabase } from '@/lib/supabase';
+
 export type PageKey =
   | 'home'
   | 'shop'
@@ -110,6 +112,40 @@ export const isPageEnabled = (key: PageKey): boolean => {
 
 export const getEnabledPageKeys = (): Set<PageKey> => {
   return new Set(getPageControls().filter((c) => c.enabled).map((c) => c.key));
+};
+
+/**
+ * Load the page controls from the Supabase database and refresh the local
+ * cache so customers on every device see the same locked/unlocked pages.
+ */
+export const loadPageControlsFromSupabase = async (): Promise<PageControl[]> => {
+  const isOnline = Boolean(
+    import.meta.env.VITE_SUPABASE_URL &&
+    import.meta.env.VITE_SUPABASE_ANON_KEY &&
+    import.meta.env.VITE_SUPABASE_URL !== 'https://placeholder.supabase.co',
+  );
+
+  if (!isOnline) return getPageControls();
+
+  try {
+    const { data, error } = await supabase.from('page_controls').select('*');
+
+    if (error || !data || data.length === 0) return getPageControls();
+
+    // Merge remote controls with the defaults so every key exists.
+    const merged = DEFAULT_PAGE_CONTROLS.map((def) => {
+      const remote = data.find((c) => c.key === def.key);
+      return remote ? { ...def, enabled: Boolean(remote.enabled) } : def;
+    });
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(PAGE_CONTROLS_KEY, JSON.stringify(merged));
+      window.dispatchEvent(new CustomEvent('happi-nuts-page-controls-updated', { detail: { synced: true } }));
+    }
+    return merged;
+  } catch {
+    return getPageControls();
+  }
 };
 
 // ============================================

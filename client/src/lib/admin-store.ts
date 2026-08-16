@@ -13,6 +13,7 @@ export type AdminOrderItem = {
   name: string;
   price: number;
   quantity: number;
+  image?: string | null;
 };
 
 export type AdminOrder = {
@@ -52,7 +53,6 @@ export type AdminCustomer = {
 // Constants
 // ============================================
 
-const ADMIN_ORDERS_KEY = 'happi-nuts-admin-orders';
 const LOCAL_PRODUCTS_KEY = 'happi-nuts-admin-products';
 
 const PRODUCT_COLUMNS = `
@@ -205,129 +205,156 @@ export const seedProductsToSupabase = async (products: Product[]): Promise<void>
 };
 
 export const saveProductToSupabase = async (product: Product): Promise<boolean> => {
-  // Always save locally first so admin edits persist even without Supabase
-  const localProducts = readLocalJson<Product[]>(LOCAL_PRODUCTS_KEY, []);
-  const existingIndex = localProducts.findIndex((p) => p.id === product.id || p.name === product.name);
-  if (existingIndex >= 0) {
-    localProducts[existingIndex] = { ...product, id: localProducts[existingIndex].id };
-  } else {
-    localProducts.unshift(product);
-  }
-  writeLocalJson(LOCAL_PRODUCTS_KEY, localProducts);
+  if (!isOnline()) return true; // offline — nothing to sync, but keep local cache
 
-  if (!isOnline()) return true; // saved locally
-
+  // Always save locally after a successful DB write for a fast local cache.
   const { error } = await supabase.from('products').upsert(toSupabaseProduct(product), { onConflict: 'id' });
   if (error) {
     console.warn('Failed to save product to Supabase:', error.message);
-    return true; // still saved locally
+    return false;
   }
   return true;
 };
 
 export const deleteProductFromSupabase = async (productId: string): Promise<boolean> => {
-  // Always remove locally so admin deletes work even without Supabase
-  const localProducts = readLocalJson<Product[]>(LOCAL_PRODUCTS_KEY, []);
-  const nextProducts = localProducts.filter((p) => p.id !== productId);
-  writeLocalJson(LOCAL_PRODUCTS_KEY, nextProducts);
-
   if (!isOnline()) return true;
 
   const { error } = await supabase.from('products').delete().eq('id', productId);
   if (error) {
     console.warn('Failed to delete product from Supabase:', error.message);
-    return true; // still deleted locally
+    return false;
   }
   return true;
 };
 
 // ============================================
-// ORDERS
+// ORDERS — DATABASE IS THE SINGLE SOURCE OF TRUTH
 // ============================================
 
+/**
+ * Fetch ALL orders from the database (admins only).
+ * The database is the single source of truth — local storage is never
+ * merged in, so every device sees exactly the same orders.
+ */
 export const fetchOrders = async (): Promise<AdminOrder[]> => {
-  const localOrders = readLocalJson<AdminOrder[]>(ADMIN_ORDERS_KEY, []);
+  if (!isOnline()) return [];
 
-  if (!isOnline()) {
-    return localOrders;
+  // Only fetch the latest 200 orders — the limit is applied at the database
+  // level so we never load more than 200 orders at once.
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (error) {
+    console.warn('Failed to fetch orders from Supabase:', error.message);
+    return [];
   }
+
+  if (!data || data.length === 0) return [];
+
+  // Fetch order items for all orders
+  const orderIds = data.map((order) => order.id);
+  const { data: itemsData } = await supabase
+    .from('order_items')
+    .select('*')
+    .in('order_id', orderIds);
+
+  // Fetch product images + names so order details can show the product
+  // image alongside the product name.
+  let productMeta: Record<string, { name: string | null; image: string | null }> = {};
+  const { data: productsData } = await supabase
+    .from('products')
+    .select('id, name, image');
+
+  if (productsData) {
+    productMeta = productsData.reduce<Record<string, { name: string | null; image: string | null }>>((acc, p) => {
+      acc[p.id] = { name: p.name || null, image: p.image || null };
+      return acc;
+    }, {});
+  }
+
+  const itemsByOrder = (itemsData || []).reduce<Record<string, AdminOrderItem[]>>((acc, item) => {
+    if (!acc[item.order_id]) acc[item.order_id] = [];
+    const product = item.product_id ? productMeta[item.product_id] : undefined;
+    acc[item.order_id].push({
+      id: item.id,
+      product_id: item.product_id,
+      name: item.name || product?.name || 'Product',
+      price: Number(item.price),
+      quantity: item.quantity,
+      image: product?.image || null,
+    });
+    return acc;
+  }, {});
+
+  return data.map((order) => ({
+    ...order,
+    subtotal: Number(order.subtotal),
+    discount: Number(order.discount),
+    delivery: Number(order.delivery),
+    total: Number(order.total),
+    items: itemsByOrder[order.id] || [],
+  }));
+};
+
+/**
+ * Fetch orders for a specific user (customer order history).
+ * Uses the authenticated user's ID — never a device/local identifier.
+ */
+export const fetchUserOrders = async (userId: string): Promise<AdminOrder[]> => {
+  if (!isOnline()) return [];
 
   const { data, error } = await supabase
     .from('orders')
     .select('*')
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.warn('Failed to fetch orders from Supabase, falling back to local:', error.message);
-    return localOrders;
+    console.warn('Failed to fetch user orders from Supabase:', error.message);
+    return [];
   }
 
-  let remoteOrders: AdminOrder[] = [];
+  if (!data || data.length === 0) return [];
 
-  if (data && data.length > 0) {
-    // Fetch order items for all orders
-    const orderIds = data.map((order) => order.id);
-    const { data: itemsData, error: itemsError } = await supabase
-      .from('order_items')
-      .select('*')
-      .in('order_id', orderIds);
+  const orderIds = data.map((order) => order.id);
+  const { data: itemsData } = await supabase
+    .from('order_items')
+    .select('*')
+    .in('order_id', orderIds);
 
-    if (!itemsError && itemsData) {
-      const itemsByOrder = itemsData.reduce<Record<string, AdminOrderItem[]>>((acc, item) => {
-        if (!acc[item.order_id]) acc[item.order_id] = [];
-        acc[item.order_id].push({
-          id: item.id,
-          product_id: item.product_id,
-          name: item.name,
-          price: Number(item.price),
-          quantity: item.quantity,
-        });
-        return acc;
-      }, {});
+  const itemsByOrder = (itemsData || []).reduce<Record<string, AdminOrderItem[]>>((acc, item) => {
+    if (!acc[item.order_id]) acc[item.order_id] = [];
+    acc[item.order_id].push({
+      id: item.id,
+      product_id: item.product_id,
+      name: item.name || 'Product',
+      price: Number(item.price),
+      quantity: item.quantity,
+      image: null,
+    });
+    return acc;
+  }, {});
 
-      remoteOrders = data.map((order) => ({
-        ...order,
-        subtotal: Number(order.subtotal),
-        discount: Number(order.discount),
-        delivery: Number(order.delivery),
-        total: Number(order.total),
-        items: itemsByOrder[order.id] || [],
-      }));
-    } else {
-      remoteOrders = data.map((order) => ({
-        ...order,
-        subtotal: Number(order.subtotal),
-        discount: Number(order.discount),
-        delivery: Number(order.delivery),
-        total: Number(order.total),
-        items: [],
-      }));
-    }
-  }
-
-  // Merge local + remote orders, dedupe by order_number
-  const merged = [...localOrders, ...remoteOrders];
-  const seen = new Set<string>();
-  return merged.filter((order) => {
-    const key = order.order_number || order.id;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  return data.map((order) => ({
+    ...order,
+    subtotal: Number(order.subtotal),
+    discount: Number(order.discount),
+    delivery: Number(order.delivery),
+    total: Number(order.total),
+    items: itemsByOrder[order.id] || [],
+  }));
 };
 
 export const updateOrderStatus = async (orderId: string, status: OrderStatus): Promise<boolean> => {
-  // Always update locally so status changes persist even without Supabase
-  const localOrders = readLocalJson<AdminOrder[]>(ADMIN_ORDERS_KEY, []);
-  const nextOrders = localOrders.map((o) => (o.id === orderId ? { ...o, status } : o));
-  writeLocalJson(ADMIN_ORDERS_KEY, nextOrders);
-
-  if (!isOnline()) return true;
+  if (!isOnline()) return false;
 
   const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
   if (error) {
     console.warn('Failed to update order status:', error.message);
-    return true; // still updated locally
+    return false;
   }
   return true;
 };
@@ -337,17 +364,12 @@ export const updateOrderDiscount = async (
   discount: number,
   total: number,
 ): Promise<boolean> => {
-  // Always update locally so discount changes persist even without Supabase
-  const localOrders = readLocalJson<AdminOrder[]>(ADMIN_ORDERS_KEY, []);
-  const nextOrders = localOrders.map((o) => (o.id === orderId ? { ...o, discount, total } : o));
-  writeLocalJson(ADMIN_ORDERS_KEY, nextOrders);
-
-  if (!isOnline()) return true;
+  if (!isOnline()) return false;
 
   const { error } = await supabase.from('orders').update({ discount, total }).eq('id', orderId);
   if (error) {
     console.warn('Failed to update order discount:', error.message);
-    return true; // still updated locally
+    return false;
   }
   return true;
 };
@@ -357,30 +379,18 @@ export const updateOrderDelivery = async (
   delivery: number,
   total: number,
 ): Promise<boolean> => {
-  // Always update locally so delivery changes persist even without Supabase
-  const localOrders = readLocalJson<AdminOrder[]>(ADMIN_ORDERS_KEY, []);
-  const nextOrders = localOrders.map((o) => (o.id === orderId ? { ...o, delivery, total } : o));
-  writeLocalJson(ADMIN_ORDERS_KEY, nextOrders);
-
-  if (!isOnline()) return true;
+  if (!isOnline()) return false;
 
   const { error } = await supabase.from('orders').update({ delivery, total }).eq('id', orderId);
   if (error) {
     console.warn('Failed to update order delivery:', error.message);
-    return true; // still updated locally
+    return false;
   }
   return true;
 };
 
 export const deleteOrder = async (orderId: string): Promise<boolean> => {
-  // Local-only orders (offline/manual orders) have no matching database record to remove.
-  const localOrders = readLocalJson<AdminOrder[]>(ADMIN_ORDERS_KEY, []);
-  const isLocalOnlyOrder = orderId.startsWith('local-') || orderId.startsWith('manual-');
-
-  if (!isOnline() || isLocalOnlyOrder) {
-    writeLocalJson(ADMIN_ORDERS_KEY, localOrders.filter((order) => order.id !== orderId));
-    return true;
-  }
+  if (!isOnline()) return false;
 
   // The database's foreign-key cascade removes the associated order items.
   const { error } = await supabase.from('orders').delete().eq('id', orderId);
@@ -388,12 +398,16 @@ export const deleteOrder = async (orderId: string): Promise<boolean> => {
     console.warn('Failed to delete order from Supabase:', error.message);
     return false;
   }
-
-  // Keep the offline cache in sync only once Supabase has accepted the deletion.
-  writeLocalJson(ADMIN_ORDERS_KEY, localOrders.filter((order) => order.id !== orderId));
   return true;
 };
 
+/**
+ * Create an order in the database.
+ *
+ * IMPORTANT: The order is ONLY considered successful when the backend
+ * confirms the database insert. If the database insert fails, this
+ * returns `null` and the caller must NOT clear the cart.
+ */
 export const createOrderInSupabase = async (order: {
   order_number: string;
   user_id: string | null;
@@ -412,66 +426,10 @@ export const createOrderInSupabase = async (order: {
   total: number;
   items: Array<{ product_id: string; name: string; price: number; quantity: number }>;
 }): Promise<AdminOrder | null> => {
-  // Build the local order object first so it always persists
-  const localOrder: AdminOrder = {
-    id: `local-${Date.now()}`,
-    order_number: order.order_number,
-    user_id: order.user_id,
-    customer_name: order.customer_name,
-    email: order.email,
-    phone: order.phone,
-    address: order.address || null,
-    city: order.city || null,
-    state: order.state || null,
-    pincode: order.pincode || null,
-    payment_method: order.payment_method,
-    payment_id: order.payment_id || null,
-    subtotal: order.subtotal,
-    discount: order.discount,
-    delivery: order.delivery,
-    total: order.total,
-    status: 'Pending',
-    created_at: new Date().toISOString(),
-    items: order.items.map((item, index) => ({
-      id: String(index),
-      product_id: item.product_id,
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-    })),
-  };
-
-  // Always save locally so orders appear in admin even without Supabase
-  const localOrders = readLocalJson<AdminOrder[]>(ADMIN_ORDERS_KEY, []);
-  localOrders.unshift(localOrder);
-  writeLocalJson(ADMIN_ORDERS_KEY, localOrders);
-
-  // Also track the customer locally so admin can see who logged in
-  if (order.user_id) {
-    const localCustomers = readLocalJson<AdminCustomer[]>('happi-nuts-admin-customers', []);
-    const existing = localCustomers.find((c) => c.id === order.user_id);
-    if (existing) {
-      existing.full_name = order.customer_name;
-      existing.email = order.email;
-      existing.phone = order.phone;
-      existing.order_count = (existing.order_count || 0) + 1;
-      existing.total_spent = (existing.total_spent || 0) + order.total;
-    } else {
-      localCustomers.unshift({
-        id: order.user_id,
-        full_name: order.customer_name,
-        email: order.email,
-        phone: order.phone,
-        role: 'customer',
-        created_at: new Date().toISOString(),
-        order_count: 1,
-        total_spent: order.total,
-      });
-    }
-    writeLocalJson('happi-nuts-admin-customers', localCustomers);
+  if (!isOnline()) {
+    console.warn('Cannot create order — Supabase is not configured.');
+    return null;
   }
-
-  if (!isOnline()) return localOrder;
 
   const { data: orderData, error: orderError } = await supabase
     .from('orders')
@@ -498,41 +456,42 @@ export const createOrderInSupabase = async (order: {
 
   if (orderError) {
     console.warn('Failed to create order in Supabase:', orderError.message);
-    return localOrder;
+    return null;
   }
 
-  if (orderData) {
-    const itemsRows = order.items.map((item) => ({
-      order_id: orderData.id,
+  if (!orderData) {
+    console.warn('Failed to create order in Supabase — no data returned.');
+    return null;
+  }
+
+  const itemsRows = order.items.map((item) => ({
+    order_id: orderData.id,
+    product_id: item.product_id,
+    name: item.name,
+    price: item.price,
+    quantity: item.quantity,
+  }));
+
+  const { error: itemsError } = await supabase.from('order_items').insert(itemsRows);
+  if (itemsError) {
+    console.warn('Failed to create order items in Supabase:', itemsError.message);
+  }
+
+  return {
+    ...orderData,
+    subtotal: Number(orderData.subtotal),
+    discount: Number(orderData.discount),
+    delivery: Number(orderData.delivery),
+    total: Number(orderData.total),
+    status: orderData.status as OrderStatus,
+    items: order.items.map((item, index) => ({
+      id: String(index),
       product_id: item.product_id,
       name: item.name,
       price: item.price,
       quantity: item.quantity,
-    }));
-
-    const { error: itemsError } = await supabase.from('order_items').insert(itemsRows);
-    if (itemsError) {
-      console.warn('Failed to create order items in Supabase:', itemsError.message);
-    }
-
-    return {
-      ...orderData,
-      subtotal: Number(orderData.subtotal),
-      discount: Number(orderData.discount),
-      delivery: Number(orderData.delivery),
-      total: Number(orderData.total),
-      status: orderData.status as OrderStatus,
-      items: order.items.map((item, index) => ({
-        id: String(index),
-        product_id: item.product_id,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-      })),
-    };
-  }
-
-  return localOrder;
+    })),
+  };
 };
 
 // ============================================
@@ -540,18 +499,16 @@ export const createOrderInSupabase = async (order: {
 // ============================================
 
 export const fetchCustomers = async (): Promise<AdminCustomer[]> => {
-  const localCustomers = readLocalJson<AdminCustomer[]>('happi-nuts-admin-customers', []);
-
-  if (!isOnline()) return localCustomers;
+  if (!isOnline()) return [];
 
   const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
 
   if (error) {
     console.warn('Failed to fetch customers:', error.message);
-    return localCustomers;
+    return [];
   }
 
-  if (!data) return localCustomers;
+  if (!data) return [];
 
   // Get order counts per user
   const { data: ordersData } = await supabase.from('orders').select('user_id, total');
@@ -564,63 +521,137 @@ export const fetchCustomers = async (): Promise<AdminCustomer[]> => {
     return acc;
   }, {});
 
-  // Read local admin overrides so roles persist even if DB column doesn't exist
-  const localRoles = readLocalJson<Record<string, string>>('happi-nuts-admin-roles', {});
-
-  const remoteCustomers = data.map((profile) => ({
+  return data.map((profile) => ({
     id: profile.id,
     full_name: profile.full_name,
     email: profile.email,
     phone: profile.phone,
-    role: localRoles[profile.id] || profile.role || 'customer',
+    role: profile.role || 'customer',
     created_at: profile.created_at,
     order_count: ordersByUser[profile.id]?.count || 0,
     total_spent: ordersByUser[profile.id]?.total || 0,
   }));
-
-  // Merge local + remote customers, dedupe by id
-  const merged = [...localCustomers, ...remoteCustomers];
-  const seen = new Set<string>();
-  return merged.filter((c) => {
-    if (seen.has(c.id)) return false;
-    seen.add(c.id);
-    return true;
-  });
 };
 
 export const updateCustomerRole = async (userId: string, role: 'customer' | 'admin'): Promise<boolean> => {
-  let dbUpdated = false;
+  if (!isOnline()) return false;
 
-  if (isOnline()) {
-    try {
-      const { error } = await supabase.from('profiles').update({ role }).eq('id', userId);
-      if (!error) {
-        dbUpdated = true;
-      } else if (!error.message.includes('column')) {
-        console.warn('Failed to update customer role:', error.message);
-      }
-    } catch (e) {
-      console.warn('Failed to update customer role:', e);
-    }
+  const { error } = await supabase.from('profiles').update({ role }).eq('id', userId);
+  if (error) {
+    console.warn('Failed to update customer role:', error.message);
+    return false;
   }
-
-  // Always update local override so role changes persist even if DB column is missing
-  const localRoles = readLocalJson<Record<string, string>>('happi-nuts-admin-roles', {});
-  if (role === 'admin') {
-    localRoles[userId] = 'admin';
-    // Also set the admin status flag for checkIsAdmin
-    const localAdmin = readLocalJson<Record<string, boolean>>('happi-nuts-admin-status', {});
-    localAdmin[userId] = true;
-    writeLocalJson('happi-nuts-admin-status', localAdmin);
-  } else {
-    delete localRoles[userId];
-    const localAdmin = readLocalJson<Record<string, boolean>>('happi-nuts-admin-status', {});
-    delete localAdmin[userId];
-    writeLocalJson('happi-nuts-admin-status', localAdmin);
-  }
-  writeLocalJson('happi-nuts-admin-roles', localRoles);
-
   return true;
+};
+
+// ============================================
+// MIGRATION — existing localStorage orders → database
+// ============================================
+
+const ADMIN_ORDERS_KEY = 'happi-nuts-admin-orders';
+
+/**
+ * One-time migration: pushes any orders that were previously stored only in
+ * localStorage (offline/legacy orders) into the Supabase database.
+ *
+ * Safely validates: only inserts orders whose order_number does NOT already
+ * exist in the database (prevents duplicates). After a successful insert the
+ * migrated order is removed from localStorage so it isn't re-inserted later.
+ */
+export const migrateLocalOrdersToSupabase = async (): Promise<void> => {
+  if (!isOnline()) return;
+
+  const localOrders = readLocalJson<AdminOrder[]>(ADMIN_ORDERS_KEY, []);
+  if (localOrders.length === 0) return;
+
+  // Fetch the order numbers already in the database so we skip duplicates.
+  const { data: existingRows } = await supabase
+    .from('orders')
+    .select('order_number');
+
+  const existingNumbers = new Set(
+    (existingRows || []).map((row) => row.order_number),
+  );
+
+  let migratedAny = false;
+
+  // Also track which order_items were inserted so we can dedupe.
+  const seenOrderNumbers = new Set<string>();
+
+  for (const localOrder of localOrders) {
+    // Only migrate local-only/legacy orders. Real database orders are
+    // already persisted — those are left untouched.
+    const isManualOrLocal =
+      localOrder.id?.startsWith('manual-') ||
+      localOrder.id?.startsWith('local-') ||
+      localOrder.order_number?.startsWith('HN-OFF-');
+
+    if (!isManualOrLocal) continue;
+
+    // Skip orders that already exist in the database.
+    if (existingNumbers.has(localOrder.order_number)) continue;
+    if (seenOrderNumbers.has(localOrder.order_number)) continue;
+    seenOrderNumbers.add(localOrder.order_number);
+
+    const orderPayload = {
+      order_number: localOrder.order_number,
+      user_id: localOrder.user_id || null,
+      customer_name: localOrder.customer_name,
+      email: localOrder.email,
+      phone: localOrder.phone,
+      address: localOrder.address || null,
+      city: localOrder.city || null,
+      state: localOrder.state || null,
+      pincode: localOrder.pincode || null,
+      payment_method: localOrder.payment_method || 'cash',
+      payment_id: localOrder.payment_id || null,
+      subtotal: Number(localOrder.subtotal) || 0,
+      discount: Number(localOrder.discount) || 0,
+      delivery: Number(localOrder.delivery) || 0,
+      total: Number(localOrder.total) || 0,
+      status: localOrder.status || 'Pending',
+    };
+
+    const { data: inserted, error } = await supabase
+      .from('orders')
+      .insert(orderPayload)
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Failed to migrate local order:', localOrder.order_number, error.message);
+      continue;
+    }
+
+    // Also insert the order items for the migrated order.
+    if (inserted && localOrder.items && localOrder.items.length > 0) {
+      const itemRows = localOrder.items.map((item) => ({
+        order_id: inserted.id,
+        product_id: item.product_id || null,
+        name: item.name || 'Product',
+        price: Number(item.price) || 0,
+        quantity: Number(item.quantity) || 1,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(itemRows);
+
+      if (itemsError) {
+        console.warn('Failed to migrate local order items:', localOrder.order_number, itemsError.message);
+      }
+    }
+
+    migratedAny = true;
+    existingNumbers.add(localOrder.order_number);
+  }
+
+  if (migratedAny) {
+    // Remove the migrated orders from localStorage so they aren't re-inserted.
+    const remaining = localOrders.filter((o) => !seenOrderNumbers.has(o.order_number));
+    writeLocalJson(ADMIN_ORDERS_KEY, remaining);
+    console.log('Successfully migrated legacy local orders to the database.');
+  }
 };
 
 // ============================================
@@ -698,4 +729,147 @@ export const setLocalAdmin = (userId: string, isAdmin: boolean): void => {
     delete localAdmin[userId];
   }
   writeLocalJson(ADMIN_LOCAL_KEY, localAdmin);
+};
+
+// ============================================
+// STORE SETTINGS — DATABASE BACKED
+// ============================================
+
+export type StoreSettingsRow = {
+  delivery_charge: number;
+  free_delivery_threshold: number;
+  default_discount_percent: number;
+};
+
+export const fetchStoreSettings = async (): Promise<StoreSettingsRow | null> => {
+  if (!isOnline()) return null;
+  const { data, error } = await supabase.from('store_settings').select('*').eq('id', 1).maybeSingle();
+  if (error) {
+    console.warn('Failed to fetch store settings:', error.message);
+    return null;
+  }
+  return data;
+};
+
+export const saveStoreSettingsToSupabase = async (settings: StoreSettingsRow): Promise<boolean> => {
+  if (!isOnline()) return false;
+  const { error } = await supabase.from('store_settings').upsert({ id: 1, ...settings });
+  if (error) {
+    console.warn('Failed to save store settings:', error.message);
+    return false;
+  }
+  return true;
+};
+
+// ============================================
+// PAGE CONTROLS — DATABASE BACKED
+// ============================================
+
+export type PageControlsRow = {
+  key: string;
+  label: string;
+  enabled: boolean;
+  description: string;
+};
+
+export const fetchPageControls = async (): Promise<PageControlsRow[] | null> => {
+  if (!isOnline()) return null;
+  const { data, error } = await supabase.from('page_controls').select('*');
+  if (error) {
+    console.warn('Failed to fetch page controls:', error.message);
+    return null;
+  }
+  return data;
+};
+
+export const savePageControlsToSupabase = async (controls: PageControlsRow[]): Promise<boolean> => {
+  if (!isOnline() || controls.length === 0) return false;
+  const { error } = await supabase.from('page_controls').upsert(controls);
+  if (error) {
+    console.warn('Failed to save page controls:', error.message);
+    return false;
+  }
+  return true;
+};
+
+// ============================================
+// PRODUCT TOGGLES — DATABASE BACKED
+// ============================================
+
+export type ProductToggleRow = {
+  product_id: string;
+  enabled: boolean;
+};
+
+export const fetchProductToggles = async (): Promise<ProductToggleRow[] | null> => {
+  if (!isOnline()) return null;
+  const { data, error } = await supabase.from('product_toggles').select('*');
+  if (error) {
+    console.warn('Failed to fetch product toggles:', error.message);
+    return null;
+  }
+  return data;
+};
+
+export const saveProductToggleToSupabase = async (productId: string, enabled: boolean): Promise<boolean> => {
+  if (!isOnline()) return false;
+  const { error } = await supabase.from('product_toggles').upsert({ product_id: productId, enabled });
+  if (error) {
+    console.warn('Failed to save product toggle:', error.message);
+    return false;
+  }
+  return true;
+};
+
+// ============================================
+// CONTACT MESSAGES — DATABASE BACKED
+// ============================================
+
+export type ContactMessageRow = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  subject: string;
+  message: string;
+  created_at: string;
+};
+
+export const fetchContactMessages = async (): Promise<ContactMessageRow[]> => {
+  if (!isOnline()) return [];
+  const { data, error } = await supabase
+    .from('contact_messages')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.warn('Failed to fetch contact messages:', error.message);
+    return [];
+  }
+  return data || [];
+};
+
+export const createContactMessage = async (message: {
+  name: string;
+  email: string;
+  phone: string;
+  subject: string;
+  message: string;
+}): Promise<boolean> => {
+  if (!isOnline()) return false;
+  const { error } = await supabase.from('contact_messages').insert(message);
+  if (error) {
+    console.warn('Failed to save contact message:', error.message);
+    return false;
+  }
+  return true;
+};
+
+export const deleteContactMessage = async (id: string): Promise<boolean> => {
+  if (!isOnline()) return false;
+  const { error } = await supabase.from('contact_messages').delete().eq('id', id);
+  if (error) {
+    console.warn('Failed to delete contact message:', error.message);
+    return false;
+  }
+  return true;
 };

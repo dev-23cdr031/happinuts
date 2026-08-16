@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Filter, ChevronDown, Sparkle, X, Package, TrendingUp } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
-import { getCatalogCategories, getCatalogProducts, syncCatalogFromSupabase } from '@/data/products';
+import { getCatalogCategories, getVisibleCatalogProducts, syncCatalogFromSupabase } from '@/data/products';
 
 export default function Shop() {
-  const [products, setProducts] = useState(() => getCatalogProducts());
+  const [products, setProducts] = useState(() => getVisibleCatalogProducts());
   const categories = useMemo(() => getCatalogCategories(), []);
   const maxMenuPrice = useMemo(
     () => Math.max(...products.map((product) => product.price)),
