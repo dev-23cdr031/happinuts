@@ -253,8 +253,96 @@ const readLocalOrders = (): AdminOrder[] => readLocalJson<AdminOrder[]>(ADMIN_OR
 const writeLocalOrders = (orders: AdminOrder[]) => writeLocalJson(ADMIN_ORDERS_KEY, orders);
 
 /**
+ * Sync any local-only orders to the database. This is used when the database
+ * becomes available after orders were saved to localStorage as a fallback.
+ * Once synced, the local copies are removed so the database is the single
+ * source of truth.
+ */
+const syncLocalOrdersToDatabase = async (localOrders: AdminOrder[]): Promise<void> => {
+  if (!isOnline() || localOrders.length === 0) return;
+
+  // Fetch the order numbers already in the database so we skip duplicates.
+  const { data: existingRows } = await supabase
+    .from('orders')
+    .select('order_number');
+
+  const existingNumbers = new Set(
+    (existingRows || []).map((row) => row.order_number),
+  );
+
+  const syncedOrderNumbers = new Set<string>();
+
+  for (const localOrder of localOrders) {
+    if (existingNumbers.has(localOrder.order_number)) continue;
+    if (syncedOrderNumbers.has(localOrder.order_number)) continue;
+    syncedOrderNumbers.add(localOrder.order_number);
+
+    const orderPayload = {
+      order_number: localOrder.order_number,
+      user_id: localOrder.user_id || null,
+      customer_name: localOrder.customer_name,
+      email: localOrder.email,
+      phone: localOrder.phone,
+      address: localOrder.address || null,
+      city: localOrder.city || null,
+      state: localOrder.state || null,
+      pincode: localOrder.pincode || null,
+      payment_method: localOrder.payment_method || 'cod',
+      payment_id: localOrder.payment_id || null,
+      subtotal: Number(localOrder.subtotal) || 0,
+      discount: Number(localOrder.discount) || 0,
+      delivery: Number(localOrder.delivery) || 0,
+      total: Number(localOrder.total) || 0,
+      status: localOrder.status || 'Pending',
+    };
+
+    const { data: inserted, error } = await supabase
+      .from('orders')
+      .insert(orderPayload)
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Failed to sync local order:', localOrder.order_number, error.message);
+      continue;
+    }
+
+    // Also insert the order items for the synced order.
+    if (inserted && localOrder.items && localOrder.items.length > 0) {
+      const itemRows = localOrder.items.map((item) => ({
+        order_id: inserted.id,
+        product_id: item.product_id || null,
+        name: item.name || 'Product',
+        price: Number(item.price) || 0,
+        quantity: Number(item.quantity) || 1,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(itemRows);
+
+      if (itemsError) {
+        console.warn('Failed to sync local order items:', localOrder.order_number, itemsError.message);
+      }
+    }
+
+    existingNumbers.add(localOrder.order_number);
+  }
+
+  if (syncedOrderNumbers.size > 0) {
+    // Remove the synced orders from localStorage so the database is the
+    // single source of truth.
+    const remaining = localOrders.filter((o) => !syncedOrderNumbers.has(o.order_number));
+    writeLocalOrders(remaining);
+    console.log('Successfully synced local orders to the database.');
+  }
+};
+
+/**
  * Fetch ALL orders from the database (admins only).
- * Falls back to localStorage when the database tables don't exist yet.
+ * The database is the single source of truth. localStorage is only used
+ * as a temporary cache when the database is unavailable, and any local
+ * orders are auto-synced to the database when it becomes available.
  */
 export const fetchOrders = async (): Promise<AdminOrder[]> => {
   if (!isOnline()) return readLocalOrders();
@@ -272,7 +360,14 @@ export const fetchOrders = async (): Promise<AdminOrder[]> => {
     return readLocalOrders();
   }
 
-  if (!data || data.length === 0) return readLocalOrders();
+  if (!data || data.length === 0) {
+    // If the database has no orders but we have local ones, sync them up.
+    const localOrders = readLocalOrders();
+    if (localOrders.length > 0) {
+      await syncLocalOrdersToDatabase(localOrders);
+    }
+    return localOrders;
+  }
 
   // Fetch order items for all orders
   const orderIds = data.map((order) => order.id);
@@ -347,8 +442,13 @@ export const fetchUserOrders = async (userId: string): Promise<AdminOrder[]> => 
   }
 
   if (!data || data.length === 0) {
-    // Fall back to local orders for this user.
-    return readLocalOrders().filter((o) => o.user_id === userId);
+    // If the database has no orders for this user but we have local ones,
+    // sync them up to the database.
+    const localOrders = readLocalOrders().filter((o) => o.user_id === userId);
+    if (localOrders.length > 0) {
+      await syncLocalOrdersToDatabase(localOrders);
+    }
+    return localOrders;
   }
 
   const orderIds = data.map((order) => order.id);
