@@ -316,10 +316,10 @@
 @keyframes pulse-ring {
   0% {
     transform: scale(0.8);
-    opacity: 0.8;
+    opacity: 0.6;
   }
   100% {
-    transform: scale(2.2);
+    transform: scale(1.5);
     opacity: 0;
   }
 }
@@ -369,6 +369,36 @@
   }
   66% {
     transform: translate(-20px, 20px) scale(0.9);
+  }
+}
+
+@keyframes aurora {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes wiggle {
+  0%, 100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+
+@keyframes orbit {
+  from {
+    transform: rotate(0deg) translateX(6px) rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg) translateX(6px) rotate(-360deg);
   }
 }
 
@@ -423,6 +453,20 @@
 
 .animate-marquee {
   animation: marquee 30s linear infinite;
+}
+
+.animate-aurora {
+  background-size: 200% 200%;
+  animation: aurora 9s ease infinite;
+}
+
+.animate-wiggle {
+  animation: wiggle 2.4s ease-in-out infinite;
+  transform-origin: left center;
+}
+
+.animate-orbit {
+  animation: stripe-slow 14s linear infinite;
 }
 
 .glass-morphism {
@@ -534,6 +578,36 @@
 .bg-dots-pattern {
   background-image: radial-gradient(rgba(233, 30, 115, 0.12) 1.5px, transparent 1.5px);
   background-size: 24px 24px;
+}
+
+/* Soft multi-point mesh background for hero sections */
+.bg-hero-mesh {
+  background:
+    radial-gradient(at 15% 15%, rgba(233, 30, 115, 0.10), transparent 45%),
+    radial-gradient(at 85% 5%, rgba(25, 169, 229, 0.10), transparent 45%),
+    radial-gradient(at 70% 85%, rgba(217, 164, 65, 0.08), transparent 40%),
+    radial-gradient(at 30% 70%, rgba(105, 168, 79, 0.06), transparent 45%);
+}
+
+/* Soft card spotlight that follows the card corners on hover */
+.card-spotlight {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-spotlight::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(600px circle at var(--spot-x, 50%) var(--spot-y, 50%), rgba(233, 30, 115, 0.12), transparent 40%);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.card-spotlight:hover::before {
+  opacity: 1;
 }
 
 .scrollbar-hide {

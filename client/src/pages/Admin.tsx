@@ -69,7 +69,7 @@ import {
   type PageControlsRow,
   type ContactMessageRow,
 } from '@/lib/admin-store';
-import { defaultProducts, getCatalogProducts, setCatalogProducts, type Product } from '@/data/products';
+import { getCatalogProducts, setCatalogProducts, type Product } from '@/data/products';
 import {
   getStoreSettings,
   saveStoreSettings,
@@ -649,48 +649,19 @@ function OrdersSection({
   const manualDelivery = manualSubtotal > 500 ? 0 : 50;
   const manualTotal = manualSubtotal + manualDelivery;
 
-  const saveManualOrder = () => {
+  const saveManualOrder = async () => {
     if (!manualOrder.customer_name || !manualOrder.phone || manualOrder.items.length === 0) {
       toast.error('Please fill customer name, phone, and add at least one product.');
       return;
     }
 
     const orderNumber = `HN-OFF-${Date.now().toString().slice(-6)}`;
-    const newOrder: AdminOrder = {
-      id: `manual-${Date.now()}`,
-      order_number: orderNumber,
-      user_id: null,
-      customer_name: manualOrder.customer_name,
-      email: manualOrder.email || 'todaymart2017@gmail.com',
-      phone: manualOrder.phone,
-      address: manualOrder.address || null,
-      city: manualOrder.city || null,
-      state: manualOrder.state || null,
-      pincode: manualOrder.pincode || null,
-      payment_method: manualOrder.payment_method,
-      payment_id: manualOrder.payment_method === 'cash' ? null : `manual-${Date.now()}`,
-      subtotal: manualSubtotal,
-      discount: 0,
-      delivery: manualDelivery,
-      total: manualTotal,
-      status: 'Pending',
-      created_at: new Date().toISOString(),
-      items: manualOrder.items.map((item, index) => ({
-        id: String(index),
-        product_id: item.product_id,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-      })),
-    };
 
-    // Save locally so it persists
-    const localOrders = JSON.parse(localStorage.getItem('happi-nuts-admin-orders') || '[]');
-    localOrders.unshift(newOrder);
-    localStorage.setItem('happi-nuts-admin-orders', JSON.stringify(localOrders));
-
-    // Also try to save to Supabase
-    createOrderInSupabase({
+    // createOrderInSupabase handles BOTH the database insert AND the
+    // localStorage fallback. If the database tables don't exist yet, the
+    // order is saved to localStorage so it persists and appears in the
+    // admin dashboard immediately.
+    const saved = await createOrderInSupabase({
       order_number: orderNumber,
       user_id: null,
       customer_name: manualOrder.customer_name,
@@ -708,6 +679,11 @@ function OrdersSection({
       total: manualTotal,
       items: manualOrder.items,
     });
+
+    if (!saved) {
+      toast.error('Failed to save the offline order. Please try again.');
+      return;
+    }
 
     toast.success(`Offline order ${orderNumber} created successfully!`);
     setShowManualOrder(false);
@@ -1046,7 +1022,12 @@ function OrdersSection({
                         <div className="text-xs text-gray-500">{order.email}</div>
                       </TableCell>
                       <TableCell className="text-sm text-gray-700">
-                        {order.items?.length || 0} item{(order.items?.length || 0) === 1 ? '' : 's'}
+                        <div className="font-medium text-happi-charcoal">
+                          {order.items?.length || 0} item{(order.items?.length || 0) === 1 ? '' : 's'}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5 max-w-[200px] truncate">
+                          {(order.items || []).map((item) => item.name).join(', ')}
+                        </div>
                       </TableCell>
                       <TableCell className="font-semibold text-happi-charcoal">
                         {formatCurrency(order.total)}
@@ -2043,6 +2024,13 @@ export default function AdminPage() {
       refreshOrders();
     }, 30_000);
 
+    // Listen for the local "orders updated" event (e.g. after saving an
+    // offline order) so the orders list refreshes immediately.
+    const handleOrdersUpdated = () => {
+      refreshOrders();
+    };
+    window.addEventListener('happi-nuts-orders-updated', handleOrdersUpdated);
+
     // REAL-TIME: subscribe to orders so a new customer order appears
     // instantly in the admin dashboard (on any device that has it open).
     const ordersChannel = supabase
@@ -2087,6 +2075,7 @@ export default function AdminPage() {
     return () => {
       authListener.subscription.unsubscribe();
       window.clearInterval(ordersInterval);
+      window.removeEventListener('happi-nuts-orders-updated', handleOrdersUpdated);
       supabase.removeChannel(ordersChannel);
       supabase.removeChannel(productsChannel);
     };
@@ -2126,18 +2115,13 @@ export default function AdminPage() {
     }
   };
 
-  // Only show products that exist in the verified catalog (or were added by admin)
-  // AND have a valid product image. Products without an image are hidden from the
-  // customer storefront (Shop page), so they must also be hidden from the admin
-  // product list to keep the counts consistent across pages.
-  //
-  // IMPORTANT: Use `defaultProducts` (the authoritative 60-product list) instead of
-  // `getCatalogProducts()` which reads device-specific localStorage — otherwise each
-  // device/browser could show a different product count based on its cached catalog.
-  const catalogNames = useMemo(() => new Set(defaultProducts.map((p) => p.name)), []);
+  // Show ALL products that have a valid image — including products added by
+  // the admin. Products without a valid image are hidden from the customer
+  // storefront (Shop page), so they must also be hidden from the admin product
+  // list to keep the counts consistent across pages.
   const adminProducts = useMemo(
-    () => products.filter((p) => catalogNames.has(p.name) && p.image && p.image.trim().length > 0),
-    [products, catalogNames],
+    () => products.filter((p) => p.image && p.image.trim().length > 0),
+    [products],
   );
 
   const handleSaveProduct = async (product: Product) => {

@@ -87,9 +87,10 @@ export default function Signup() {
         throw error;
       }
 
-      // If the project has email confirmation enabled, signUp returns
-      // a user WITHOUT a session. Automatically sign in so the user is
-      // logged in immediately — no email confirmation detour needed.
+      // Email confirmation is disabled at the Supabase project level
+      // (see supabase/disable-email-confirmation.sql), so signUp returns
+      // a session immediately. As a safety net, if a session is still
+      // missing, try to auto-sign-in so the user is logged in right away.
       if (data.user && !data.session) {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: formData.email,
@@ -98,6 +99,11 @@ export default function Signup() {
 
         if (signInError) {
           console.warn('Auto sign-in after signup failed:', signInError.message);
+          toast.error(
+            'Account created! Please check your email to confirm your account before signing in.',
+          );
+          setLocation('/login');
+          return;
         }
       }
 
